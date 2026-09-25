@@ -18,22 +18,36 @@ npm install
 npm run studio:dev
 
 # desktop shell (requires a Rust toolchain — see Prerequisites)
-npm run studio:tauri dev
+npm run studio:tauri:dev
+npm run studio:tauri:build
 
 # checks
 npm run studio:typecheck
-npm test -w @jevshield/studio
+npm run studio:test
 npm run studio:build
+```
+
+The `studio` job in `.github/workflows/ci.yml` runs those three checks on Node 22 and 24.
+
+Arbitrary Tauri CLI flags need the workspace form, because a root `npm run <script> -- <flag>`
+appends the flag to the inner npm call and it gets swallowed:
+
+```bash
+npm run tauri -w @jevshield/studio -- dev --help
 ```
 
 ### Prerequisites for the desktop shell
 
-The React workbench runs with just Node 20+. The **Tauri shell additionally needs**:
+The React workbench runs with just Node 22+. The **Tauri shell additionally needs**:
 
 - Rust 1.77.2+ (`rustup`) and `cargo`
 - Platform build deps: WebView2 (Windows) / `webkit2gtk` + `libappindicator` (Linux) / Xcode CLT (macOS)
-- Icons before bundling: `npm run tauri icon path/to/icon.png` — `tauri.conf.json` ships no
+- Icons before bundling: `npx tauri icon path/to/icon.png` — `tauri.conf.json` ships no
   `bundle.icon` entry, so `tauri dev` works but `tauri build` needs one.
+
+Run `npx tauri info` to check your machine. On the machine this was written on it reports
+WebView2 present but `rustc`, `Cargo` and an MSVC build-tools instance all missing — which is why
+the Rust side of this app has never been compiled.
 
 ## Demo mode vs live mode
 
@@ -94,8 +108,8 @@ engine changes hot-reload with no build step. Core's own `.js` relative specifie
 ### Why the engine layer is separate
 
 `src/engine` imports nothing from React or the DOM. That is deliberate: it means the routing,
-chunking and security logic is verifiable under plain Node (`npm test -w @jevshield/studio`,
-19 tests) rather than only by clicking around the UI.
+chunking and security logic is verifiable under plain Node (`npm run studio:test`, 19 tests)
+rather than only by clicking around the UI.
 
 ## Corrections to the original spec
 
@@ -145,6 +159,10 @@ Verified in this environment:
 - 19 engine tests passing
 - `vite build` succeeds, entry chunk 352 kB with Monaco / recharts / dockview / genai split out
 
-**Not verified:** the Rust/Tauri shell. No Rust toolchain was available here, so
-`src-tauri/` is written against the Tauri v2 conventions but has never been compiled. Expect to
-run `cargo check` once and possibly adjust crate versions.
+Also verified: the Tauri CLI itself is installed and wired up (`tauri-cli 2.11.5`);
+`npm run studio:tauri:dev` reaches the CLI and fails only on the missing toolchain.
+
+**Not verified:** the Rust/Tauri shell. `npx tauri info` reports `rustc: not installed`,
+`Cargo: not installed` and no MSVC build tools, so `src-tauri/` is written against the Tauri v2
+conventions but has never been compiled. Expect to run `cargo check` once and possibly adjust
+crate versions.

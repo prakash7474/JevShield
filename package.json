@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -53,7 +53,9 @@
     "studio:dev": "npm run dev -w @jevshield/studio",
     "studio:build": "npm run build -w @jevshield/studio",
     "studio:typecheck": "npm run typecheck -w @jevshield/studio",
-    "studio:tauri": "npm run tauri -w @jevshield/studio"
+    "studio:test": "npm run test -w @jevshield/studio",
+    "studio:tauri:dev": "npm run tauri -w @jevshield/studio -- dev",
+    "studio:tauri:build": "npm run tauri -w @jevshield/studio -- build"
   },
   "keywords": [
     "jev",

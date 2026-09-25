@@ -12,7 +12,7 @@ generative model only when Jev cannot answer confidently enough.
 npm install @jevshield/core
 ```
 
-- **Runtime:** Node 20+ (ESM only)
+- **Runtime:** Node 22+ (ESM only — `p-retry@8` requires it)
 - **Types:** TypeScript 5.x / 7.x, `strict` clean including `noUncheckedIndexedAccess`
 - **Hard dependencies:** `axios`, `p-retry`, `zod`, `@google/genai`
 - **Optional:** `@anthropic-ai/sdk` (loaded lazily, only if you use that provider)
@@ -126,7 +126,7 @@ result.enrichedState?.["__jevshield"];
 //   stats:           { failed_payouts: { count: 3, sum: 245, mean: 81.666667, min: 45, max: 120, median: 80 } },
 //   date_differences:{},
 //   custom:          {},
-//   truncation:      { applied: false, strategy: "none", estimatedTokens: 214, finalTokens: 214, maxTokens: 30000 },
+//   truncation:      { applied: false, strategy: "none", estimatedTokens: 164, finalTokens: 164, maxTokens: 30000 },
 // }
 ```
 
@@ -200,7 +200,7 @@ What it derives:
 
 | Derivation | Detection rule |
 |---|---|
-| Dates | ISO-8601 strings (the only string format trusted), plus numbers on date-like keys (`created`, `updated`, `at`, `date`, `time`, `expires`, `start`, `end`, `deadline`, `due`) interpreted as epoch seconds or milliseconds within a plausible 2001–2100 window |
+| Dates | ISO-8601 strings (the only string format trusted), plus numbers on date-like keys (`at`, `date`, `time`, `timestamp`, `created`, `updated`, `expires`, `expiry`, `start`, `end`, `deadline`, `due`) interpreted as epoch seconds or milliseconds within a plausible 2001–2100 window |
 | Per-date facts | `iso`, `elapsed_days`, `elapsed_hours`, `elapsed_seconds`, `direction` (`past` / `future` / `now`) |
 | Counts | Length of every array, keyed by dotted path (`items`, `customer.tags`, `events[0].tags`) |
 | Statistics | For arrays that are *entirely* numeric: `count`, `sum`, `min`, `max`, `mean`, `median` |
@@ -369,8 +369,10 @@ auto-enabled from ambient environment variables, so construction never fails on 
 
 **`JevRetryConfig`** — `{ retries: 3, minTimeoutMs: 500, maxTimeoutMs: 8000, factor: 2,
 retryOnServerErrors: true }`. Retried: `429`, `529`, `5xx` and transport failures, with
-exponential backoff honouring `Retry-After` when present. Failed fast: `401` and `422`, plus every
-other `4xx` and malformed-response errors — repeating those cannot change the answer.
+exponential backoff. `Retry-After` is captured as `retryAfterMs` on `JevRateLimitError` for
+callers that want to honour it, but it does not currently override the backoff schedule. Failed
+fast: `401` and `422`, plus every other `4xx` and malformed-response errors — repeating those
+cannot change the answer. Set `retries: 0` to disable retrying entirely.
 
 ### `DecideOptions`
 
@@ -624,14 +626,32 @@ npm test            # vitest run
 npm run build       # tsc -p tsconfig.build.json → dist/ + .d.ts
 ```
 
-Workspace scripts:
+Workspace scripts — run from the repository root:
 
 ```bash
-npm run studio:dev        # Vite dev server on :1420
+npm run studio:dev           # Vite dev server on :1420
 npm run studio:typecheck
-npm run studio:build
-npm run studio:tauri      # tauri CLI (requires a Rust toolchain)
+npm run studio:test          # studio engine tests
+npm run studio:build         # typecheck + production bundle
+npm run studio:tauri:dev     # desktop shell (needs a Rust toolchain)
+npm run studio:tauri:build
 ```
+
+To pass arbitrary flags to the Tauri CLI, use the workspace form directly — a root
+`npm run <script> -- <flag>` appends the flag to the *inner* npm invocation and it gets swallowed:
+
+```bash
+npm run tauri -w @jevshield/studio -- dev --help
+```
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and on every pull request. It has one job
+per workspace — `core` and `studio` — and each job runs the full typecheck / test / build sequence
+on **Node 22 and Node 24** (`npm ci`, so the lockfile is authoritative).
+
+CI does **not** build the Tauri desktop shell: the Rust crate has never been compiled and needs a
+system Rust toolchain plus platform WebView dependencies that a default runner does not provide.
 
 ### Module map
 
@@ -690,4 +710,4 @@ heuristic and confidence routing.
 
 ## License
 
-Apache-2.0
+Apache-2.0 — see [LICENSE](./LICENSE).
