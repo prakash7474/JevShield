@@ -1,0 +1,78 @@
+{
+  "name": "@jevshield/core",
+  "version": "0.1.0",
+  "description": "Enterprise TypeScript SDK that patches and wraps TypeSafe AI's Jev (System One) decision model: deterministic state enrichment, adversarial dual-guardrails, confidence-gated generative fallback and deterministic prose rendering.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/types/index.js"
+    },
+    "./enricher": {
+      "types": "./dist/enricher/stateEnricher.d.ts",
+      "import": "./dist/enricher/stateEnricher.js"
+    },
+    "./security": {
+      "types": "./dist/security/dualGuardrail.d.ts",
+      "import": "./dist/security/dualGuardrail.js"
+    },
+    "./renderer": {
+      "types": "./dist/renderer/decisionRenderer.d.ts",
+      "import": "./dist/renderer/decisionRenderer.js"
+    },
+    "./router": {
+      "types": "./dist/router/cascadeRouter.d.ts",
+      "import": "./dist/router/cascadeRouter.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "studio:dev": "npm run dev -w @jevshield/studio",
+    "studio:build": "npm run build -w @jevshield/studio",
+    "studio:typecheck": "npm run typecheck -w @jevshield/studio",
+    "studio:tauri": "npm run tauri -w @jevshield/studio"
+  },
+  "keywords": [
+    "jev",
+    "typesafe",
+    "system-one",
+    "decision-model",
+    "guardrails",
+    "prompt-injection",
+    "llm-sdk"
+  ],
+  "dependencies": {
+    "@google/genai": "^2.24.0",
+    "axios": "^1.20.0",
+    "p-retry": "^8.0.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}

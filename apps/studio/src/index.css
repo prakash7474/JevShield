@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+/*
+ * JevShield Studio design tokens.
+ *
+ * Tailwind v4 is CSS-first: declaring `--color-*` inside `@theme` generates the
+ * matching utilities (`bg-surface-1`, `text-accent`, `border-edge`, ...).
+ */
+@theme {
+  --color-surface-0: #0b0e14;
+  --color-surface-1: #10141c;
+  --color-surface-2: #161b25;
+  --color-surface-3: #1d2430;
+  --color-edge: #232b38;
+  --color-edge-strong: #313c4e;
+
+  --color-accent: #2dd4bf;
+  --color-accent-soft: #0f3f3b;
+  --color-ok: #4ade80;
+  --color-warn: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #60a5fa;
+  --color-violet: #a78bfa;
+
+  --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, "Cascadia Mono", monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    font-synthesis-weight: none;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-edge-strong);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3f4b60;
+  }
+
+  button {
+    font: inherit;
+  }
+}
+
+/* Align dockview's theme with our palette. Imported after dockview's own
+   stylesheet so these variables win. */
+.dockview-theme-abyss {
+  --dv-background-color: var(--color-surface-0);
+  --dv-paneview-header-border-color: var(--color-edge);
+  --dv-tabs-and-actions-container-background-color: var(--color-surface-1);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--color-surface-2);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--color-surface-1);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--color-surface-1);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--color-surface-1);
+  --dv-activegroup-visiblepanel-tab-color: #e2e8f0;
+  --dv-activegroup-hiddenpanel-tab-color: #7c8aa0;
+  --dv-separator-border: var(--color-edge);
+  --dv-paneview-active-outline-color: var(--color-accent);
+  --dv-tabs-container-scrollbar-color: var(--color-edge-strong);
+  --dv-icon-hover-background-color: var(--color-surface-3);
+}

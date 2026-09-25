@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Baseline capability for the JevShield Studio main window. Network access to TypeSafe AI and Google Generative Language happens from the webview, so no extra permissions are required yet.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
