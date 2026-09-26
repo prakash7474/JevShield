@@ -55,7 +55,13 @@
     "studio:typecheck": "npm run typecheck -w @jevshield/studio",
     "studio:test": "npm run test -w @jevshield/studio",
     "studio:tauri:dev": "npm run tauri -w @jevshield/studio -- dev",
-    "studio:tauri:build": "npm run tauri -w @jevshield/studio -- build"
+    "studio:tauri:build": "npm run tauri -w @jevshield/studio -- build",
+    "cloud:dev": "npm run dev -w @jevshield/cloud",
+    "cloud:build": "npm run build -w @jevshield/cloud",
+    "cloud:typecheck": "npm run typecheck -w @jevshield/cloud",
+    "cloud:start": "npm run start -w @jevshield/cloud",
+    "cloud:db:push": "npm run db:push -w @jevshield/cloud",
+    "cloud:db:generate": "npm run db:generate -w @jevshield/cloud"
   },
   "keywords": [
     "jev",

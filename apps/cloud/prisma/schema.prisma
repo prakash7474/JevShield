@@ -1,0 +1,103 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  OVERRIDDEN
+  REJECTED
+}
+
+// ---------------------------------------------------------------------------
+// Question Registry — versioned question sets synced across teams
+// ---------------------------------------------------------------------------
+
+model QuestionSet {
+  id        String   @id @default(uuid())
+  name      String
+  version   String   // SemVer e.g. "1.0.0"
+  schemaJson Json
+  author    String?
+  changelog String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reviews HitlReview[]
+
+  @@unique([name, version])
+  @@index([name])
+  @@index([isActive])
+}
+
+// ---------------------------------------------------------------------------
+// Human-in-the-Loop Review Queue
+// ---------------------------------------------------------------------------
+
+model HitlReview {
+  id              String       @id @default(uuid())
+  statePayload    Json
+  questionSetId   String
+  questionSet     QuestionSet  @relation(fields: [questionSetId], references: [id])
+  selectedChoice  String?
+  confidenceScore Float
+  hazardScore     Float
+  reason          String       @default("low-confidence")
+  status          ReviewStatus @default(PENDING)
+  reviewerComment String?
+  reviewerId      String?
+  overrideChoice  String?
+  createdAt       DateTime     @default(now())
+  resolvedAt      DateTime?
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Audit Log — every evaluation request is recorded
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id              String   @id @default(uuid())
+  clientApiKeyHash String
+  endpoint        String
+  stateHash       String?
+  jevLatencyMs    Int
+  geminiLatencyMs Int?
+  isFallback      Boolean  @default(false)
+  confidenceScore Float?
+  blockedByGuard   Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([clientApiKeyHash])
+  @@index([createdAt])
+  @@index([blockedByGuard])
+}
+
+// ---------------------------------------------------------------------------
+// API Key Registry — client identity and quotas
+// ---------------------------------------------------------------------------
+
+model ApiKey {
+  id            String   @id @default(uuid())
+  keyHash       String   @unique
+  name          String
+  team          String?
+  dailyQuota    Int      @default(10000)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  lastUsedAt    DateTime?
+
+  @@index([keyHash])
+}

@@ -1,18 +1,18 @@
-# @jevshield/core
+# JevShield
 
-Enterprise TypeScript SDK that **patches and wraps** TypeSafe AI's [Jev](https://docs.typesafe.ai/api)
-System One model, and bridges it to Google Gemini for text generation.
+Enterprise AI routing platform in three phases:
 
-Jev (`POST https://api.typesafe.ai/v1/systemone`) returns *typed probabilistic decisions*
-(`noul`, `choice`, `score`) in roughly 100 ms instead of generated prose. JevShield keeps that
-speed and determinism while closing the architectural gaps around it — and escalates to a
-generative model only when Jev cannot answer confidently enough.
+| Phase | Package | Description |
+|---|---|---|
+| **1. Core SDK** | `@jevshield/core` | Headless SDK — deterministic state enrichment, adversarial guardrails, confidence-gated generative fallback, prose rendering |
+| **2. Studio** | `@jevshield/studio` | Tauri v2 + React desktop IDE for designing, auditing and replaying Jev decision pipelines |
+| **3. Cloud Gateway** | `@jevshield/cloud` | Production gateway, telemetry engine, and central registry — scales Core and Studio across teams and microservices |
 
 ```bash
-npm install @jevshield/core
+npm install @jevshield/core    # Phase 1 — headless SDK
 ```
 
-- **Runtime:** Node 22+ (ESM only — `p-retry@8` requires it)
+- **Runtime:** Node 22+ (ESM only)
 - **Types:** TypeScript 5.x / 7.x, `strict` clean including `noUncheckedIndexedAccess`
 - **Hard dependencies:** `axios`, `p-retry`, `zod`, `@google/genai`
 - **Optional:** `@anthropic-ai/sdk` (loaded lazily, only if you use that provider)
@@ -27,6 +27,7 @@ npm install @jevshield/core
 - [How each patch works](#how-each-patch-works)
 - [API reference](#api-reference)
 - [Environment variables](#environment-variables)
+- [Phase 3: Cloud Gateway](#phase-3-cloud-gateway)
 - [Design decisions and gotchas](#design-decisions-and-gotchas)
 - [Development](#development)
 - [Known limitations](#known-limitations)
@@ -53,14 +54,17 @@ This repository is an npm workspace:
 |---|---|---|
 | `/` | `@jevshield/core` | The engine — this document |
 | `apps/studio` | `@jevshield/studio` | **JevShield Studio**, a Tauri v2 + React desktop IDE for designing, auditing and replaying Jev decision pipelines |
+| `apps/cloud` | `@jevshield/cloud` | **JevShield Cloud**, enterprise gateway, HITL review queue, question registry, and OpenTelemetry metrics |
 
 ```bash
-npm install          # installs both workspaces
+npm install          # installs all workspaces
 npm test             # core unit tests
 npm run studio:dev   # launch the Studio workbench
+npm run cloud:dev    # launch the Cloud gateway
 ```
 
 See [`apps/studio/README.md`](apps/studio/README.md) for the IDE.
+See [Phase 3: Cloud Gateway](#phase-3-cloud-gateway) for the production gateway.
 
 ---
 
@@ -553,6 +557,8 @@ import type {
 
 ## Environment variables
 
+### Core SDK (Phase 1)
+
 | Variable | Required | Used for |
 |---|---|---|
 | `TYPESAFE_API_KEY` | **yes** (unless passed explicitly) | `Authorization: Bearer` to TypeSafe |
@@ -565,12 +571,221 @@ import type {
 | `ANTHROPIC_API_KEY` | for the Anthropic provider | Fallback escalation |
 | `ANTHROPIC_MODEL` | no | Defaults to `claude-sonnet-4-5` |
 
+### Cloud Gateway (Phase 3)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `PORT` | no | `4000` | Gateway listen port |
+| `HOST` | no | `0.0.0.0` | Gateway bind address |
+| `DATABASE_URL` | **yes** | — | PostgreSQL connection string |
+| `REDIS_URL` | no | `redis://localhost:6379` | Redis connection string |
+| `TYPESAFE_API_KEY` | **yes** | — | Upstream Jev API key |
+| `GEMINI_API_KEY` | no | — | Gemini fallback key |
+| `RATE_LIMIT_MAX` | no | `1000` | Requests per window |
+| `RATE_LIMIT_WINDOW_SECONDS` | no | `60` | Rate limit window |
+| `HITL_CONFIDENCE_THRESHOLD` | no | `0.70` | Auto-queue threshold |
+| `LOG_LEVEL` | no | `info` | Fastify log level |
+
 Copy [`.env.example`](.env.example) to `.env`. `.env` is gitignored.
 
 > **Browser bundlers:** `process.env` is read only as a *fallback* when no explicit key is passed,
 > and `??` / `||` short-circuit, so passing keys explicitly means `process` is never dereferenced.
 > In a browser or webview, still shim `globalThis.process ??= { env: {} }` before importing. This
 > is exactly what JevShield Studio does.
+
+---
+
+## Phase 3: Cloud Gateway
+
+`@jevshield/cloud` is the centralized control plane running on Kubernetes/Cloud Edge. It proxies
+evaluation requests, enforces rate limits and quotas, routes low-confidence decisions to human
+reviewers, and exports live metrics for Grafana dashboards.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        JevShield Cloud Gateway                      │
+│                                                                     │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
+│  │   Fastify    │  │    Redis     │  │  PostgreSQL  │              │
+│  │   Server     │  │  (Rate Limit │  │  (Registry,  │              │
+│  │   :4000      │  │   + Quotas)  │  │   HITL, Log) │              │
+│  └──────┬───────┘  └──────────────┘  └──────────────┘              │
+│         │                                                           │
+│  ┌──────┴───────┐                                                   │
+│  │  /metrics    │──→ Prometheus ──→ Grafana Dashboard               │
+│  └──────────────┘                                                   │
+│         │                                                           │
+│  ┌──────┴───────────────────────────────────┐                       │
+│  │  POST /v1/evaluate                      │                       │
+│  │  ├→ Primary: TypeSafe AI Jev API        │                       │
+│  │  └→ Fallback: Gemini Flash (on 5xx/timeout)│                     │
+│  └──────────────────────────────────────────┘                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Modules
+
+| Module | File | Description |
+|---|---|---|
+| **Gateway Proxy** | `src/gateway/proxyServer.ts` | Reverse proxy with sliding-window rate limiting, API key validation, token quotas, and automatic failover |
+| **OpenTelemetry** | `src/telemetry/otel.ts` | 11 Prometheus metrics: latency histograms, confidence distribution, security blocks, fallback triggers, quota exhaustion |
+| **HITL Queue** | `src/hitl/reviewQueue.ts` | Routes low-confidence requests (< 0.70) to human reviewers; REST API for approve/override/reject |
+| **Question Registry** | `src/registry/questionRegistry.ts` | SemVer versioned question sets with diff, sync, and deactivation |
+
+### Quick start
+
+```bash
+# Install dependencies
+cd apps/cloud
+npm install
+
+# Set up database
+export DATABASE_URL="postgresql://jevshield:secret_password@localhost:5432/jevshield_db?schema=public"
+npx prisma db push
+
+# Start in development
+npm run cloud:dev
+```
+
+### API endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Healthcheck — returns service status and timestamp |
+| `GET` | `/metrics` | Prometheus metrics endpoint |
+| `POST` | `/v1/evaluate` | Single evaluation proxy — rate limited, quota checked, failover enabled |
+| `POST` | `/v1/evaluate/batch` | Batch evaluation — up to 50 requests per call |
+| `GET` | `/v1/hitl/pending` | List pending HITL reviews (paginated) |
+| `GET` | `/v1/hitl/stats` | HITL queue statistics |
+| `GET` | `/v1/hitl/:id` | Get a specific review |
+| `POST` | `/v1/hitl/resolve` | Resolve a review (approve/override/reject) |
+| `POST` | `/v1/hitl/bulk-resolve` | Bulk resolve reviews |
+| `GET` | `/v1/registry/sets` | List question sets |
+| `GET` | `/v1/registry/sets/:name` | Get all versions of a question set |
+| `GET` | `/v1/registry/sets/:name/latest` | Get the latest active version |
+| `GET` | `/v1/registry/sets/:name/diff` | Diff two versions |
+| `POST` | `/v1/registry/sets` | Publish a new question set |
+| `PUT` | `/v1/registry/sets/:id/deactivate` | Deactivate a question set |
+| `POST` | `/v1/registry/sync` | Sync hook for SDKs and Studio |
+
+### Request example
+
+```bash
+curl -X POST http://localhost:4000/v1/evaluate \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-api-key" \
+  -d '{
+    "state": {
+      "user_comment": "I need a refund for my order",
+      "order_total": 149.99,
+      "created_at": "2026-09-20T12:00:00.000Z"
+    },
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this convey urgency?"
+      },
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this?",
+        "criteria": {
+          "billing": "Payments, invoicing, refunds",
+          "technical": "Bugs, outages, integrations"
+        }
+      }
+    }
+  }'
+```
+
+### Response format
+
+```json
+{
+  "success": true,
+  "model": "jev-1.13.0",
+  "answers": { ... },
+  "usage": { "input_tokens": 128, "output_tokens": 0 },
+  "confidence": 0.87,
+  "latencyMs": 142,
+  "isFallback": false,
+  "rateLimit": { "remaining": 998, "resetMs": 60000 },
+  "quota": { "remaining": 9999 }
+}
+```
+
+### Rate limiting
+
+Sliding-window rate limiter backed by Redis sorted sets. Configurable per-deployment:
+
+| Variable | Default | Description |
+|---|---|---|
+| `RATE_LIMIT_MAX` | `1000` | Max requests per window |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60` | Window duration |
+
+Returns `429 Too Many Requests` with `Retry-After` and `X-RateLimit-Remaining` headers.
+
+### Failover
+
+If the primary TypeSafe AI endpoint returns a 5xx or exceeds 1500ms timeout, the gateway
+silently reroutes to Gemini Flash. Both failures return `502` with no dropped requests.
+
+### Prometheus metrics
+
+| Metric | Type | Description |
+|---|---|---|
+| `jevshield_jev_latency_ms` | histogram | Jev API latency (buckets: 10–5000ms) |
+| `jevshield_gemini_latency_ms` | histogram | Gemini fallback latency |
+| `jevshield_confidence_histogram` | histogram | Confidence score distribution |
+| `jevshield_security_blocks_total` | counter | Prompt injections blocked |
+| `jevshield_requests_total` | counter | Requests by method/route/status |
+| `jevshield_hitl_queue_size` | summary | HITL queue depth |
+| `jevshield_fallback_triggers_total` | counter | Fallback escalations by reason |
+| `jevshield_quota_exceeded_total` | counter | Quota rejections |
+| `jevshield_calibration_predictions_total` | counter | Predictions by confidence bucket |
+| `jevshield_calibration_correct_total` | counter | Correct predictions by bucket |
+
+### Docker deployment
+
+```bash
+cd apps/cloud
+
+# Start all services (Gateway + PostgreSQL + Redis + Prometheus + Grafana)
+docker compose up -d
+
+# Run database migrations
+docker compose exec gateway npx prisma db push
+
+# Access:
+#   Gateway API:      http://localhost:4000
+#   Prometheus:       http://localhost:9090
+#   Grafana:          http://localhost:3000 (admin / admin)
+```
+
+### Database schema
+
+| Model | Purpose |
+|---|---|
+| `QuestionSet` | Versioned question sets (SemVer) synced across teams |
+| `HitlReview` | Low-confidence requests queued for human review |
+| `AuditLog` | Every evaluation request logged for compliance |
+| `ApiKey` | Client identity, team assignment, and daily quotas |
+
+### Environment variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `PORT` | no | `4000` | Gateway listen port |
+| `HOST` | no | `0.0.0.0` | Gateway bind address |
+| `DATABASE_URL` | **yes** | — | PostgreSQL connection string |
+| `REDIS_URL` | no | `redis://localhost:6379` | Redis connection string |
+| `TYPESAFE_API_KEY` | **yes** | — | Upstream Jev API key |
+| `GEMINI_API_KEY` | no | — | Gemini fallback key |
+| `RATE_LIMIT_MAX` | no | `1000` | Requests per window |
+| `RATE_LIMIT_WINDOW_SECONDS` | no | `60` | Rate limit window |
+| `HITL_CONFIDENCE_THRESHOLD` | no | `0.70` | Auto-queue threshold |
+| `LOG_LEVEL` | no | `info` | Fastify log level |
 
 ---
 
@@ -619,7 +834,7 @@ the derived block without changing what Jev sees. The facade therefore:
 ## Development
 
 ```bash
-npm install         # install both workspaces
+npm install         # install all workspaces
 
 npm run typecheck   # tsc -p tsconfig.json --noEmit  (strict)
 npm test            # vitest run
@@ -629,12 +844,21 @@ npm run build       # tsc -p tsconfig.build.json → dist/ + .d.ts
 Workspace scripts — run from the repository root:
 
 ```bash
+# Studio (Phase 2)
 npm run studio:dev           # Vite dev server on :1420
 npm run studio:typecheck
 npm run studio:test          # studio engine tests
 npm run studio:build         # typecheck + production bundle
 npm run studio:tauri:dev     # desktop shell (needs a Rust toolchain)
 npm run studio:tauri:build
+
+# Cloud Gateway (Phase 3)
+npm run cloud:dev            # Fastify dev server on :4000
+npm run cloud:build          # prisma generate + tsc
+npm run cloud:typecheck
+npm run cloud:start          # production start
+npm run cloud:db:push        # push Prisma schema to database
+npm run cloud:db:generate    # regenerate Prisma client
 ```
 
 To pass arbitrary flags to the Tauri CLI, use the workspace form directly — a root
@@ -647,8 +871,8 @@ npm run tauri -w @jevshield/studio -- dev --help
 ### Continuous integration
 
 `.github/workflows/ci.yml` runs on every push to `main` and on every pull request. It has one job
-per workspace — `core` and `studio` — and each job runs the full typecheck / test / build sequence
-on **Node 22 and Node 24** (`npm ci`, so the lockfile is authoritative).
+per workspace — `core`, `studio`, and `cloud` — and each job runs the full typecheck / test / build
+sequence on **Node 22 and Node 24** (`npm ci`, so the lockfile is authoritative).
 
 CI does **not** build the Tauri desktop shell: the Rust crate has never been compiled and needs a
 system Rust toolchain plus platform WebView dependencies that a default runner does not provide.
@@ -656,17 +880,24 @@ system Rust toolchain plus platform WebView dependencies that a default runner d
 ### Module map
 
 ```
-src/
-├── index.ts                       JevShield facade + all public exports
-├── types/index.ts                 wire types, limits, options, result shapes
-├── errors.ts                      typed error hierarchy
-├── client/jevClient.ts            axios + p-retry transport
-├── client/schemas.ts              zod validation + hard-limit enforcement
-├── enricher/stateEnricher.ts      deterministic derivation + truncation
-├── security/dualGuardrail.ts      adversarial question + verdict extraction
-├── router/cascadeRouter.ts        Gemini Flash text generation (@google/genai)
-├── fallback/generativeFallback.ts Gemini / Anthropic / custom endpoint
-└── renderer/decisionRenderer.ts   normalization + deterministic prose
+src/                                    # Phase 1 — Core SDK
+├── index.ts                            JevShield facade + all public exports
+├── types/index.ts                      wire types, limits, options, result shapes
+├── errors.ts                           typed error hierarchy
+├── client/jevClient.ts                 axios + p-retry transport
+├── client/schemas.ts                   zod validation + hard-limit enforcement
+├── enricher/stateEnricher.ts           deterministic derivation + truncation
+├── security/dualGuardrail.ts           adversarial question + verdict extraction
+├── router/cascadeRouter.ts             Gemini Flash text generation (@google/genai)
+├── fallback/generativeFallback.ts      Gemini / Anthropic / custom endpoint
+└── renderer/decisionRenderer.ts        normalization + deterministic prose
+
+apps/cloud/src/                         # Phase 3 — Cloud Gateway
+├── index.ts                            Fastify bootstrap, CORS, metrics, graceful shutdown
+├── telemetry/otel.ts                   11 Prometheus metrics + setupTelemetry()
+├── gateway/proxyServer.ts              /v1/evaluate, rate limiter, API key + quota, failover
+├── hitl/reviewQueue.ts                 HITL REST API — pending, resolve, bulk-resolve, stats
+└── registry/questionRegistry.ts        Question set CRUD, diff, sync for SDKs and Studio
 ```
 
 ### Test coverage
@@ -679,10 +910,21 @@ mocked `@google/genai`, and facade-level cascade integration over a stubbed tran
 `apps/studio` adds 19 engine tests covering the demo pipeline, the tree chunker, the injection
 heuristic and confidence routing.
 
+`apps/cloud` provides end-to-end verification against live services:
+
+| Test | Command | Target |
+|---|---|---|
+| Healthcheck & DB | `GET /health` | HTTP 200 with service status |
+| Rate Limiting | Burst requests (limit=5) | HTTP 429 after limit |
+| Security Gate | No key / invalid key | HTTP 401 / 403 |
+| Failover | Primary failure → Gemini | `fallback_triggers_total` increments |
+| Telemetry | `GET /metrics` | 11 custom metrics live |
+
 ### Verified
 
 - `tsc --noEmit` clean under `strict` + `noUncheckedIndexedAccess` + `verbatimModuleSyntax`
 - 61 core tests + 19 studio tests passing
+- Cloud gateway typechecked and running on live PostgreSQL + Redis
 - `npm run build` emits `dist/` and `.d.ts`; the built ESM entry imports cleanly
 - Studio `vite build` succeeds with Monaco / recharts / dockview / `@google/genai` split into
   separate chunks
@@ -705,6 +947,11 @@ heuristic and confidence routing.
 - **No retry inside the fallback providers.** `GeminiCascadeRouter` makes one attempt; wrap it
   yourself or rely on the facade's degradation path.
 - **Cost figures in JevShield Studio are placeholder rates**, not published prices.
+- **Cloud gateway requires running PostgreSQL and Redis.** Docker Compose handles this for local
+  development; production deployments need managed services (RDS, ElastiCache, Cloud SQL, etc.).
+- **Cloud gateway security interception depends on the upstream Jev API.** The adversarial check
+  runs server-side at TypeSafe AI; the gateway validates API keys and routes responses but does not
+  perform injection detection independently.
 
 ---
 
