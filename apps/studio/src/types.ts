@@ -132,6 +132,40 @@ export interface EnrichmentPreview {
   dateDifferences: Array<{ pair: string; days: number }>;
 }
 
+/** Structured result behind one assistant turn in the chat route. */
+export interface ChatReply {
+  action: CascadeAction;
+  confidence: number;
+  decisions: JevDecision[];
+  security: RunSecurity;
+  /** Every pipeline stage, with its status, duration and detail lines. */
+  stages: StageResult[];
+  /**
+   * The payload the pipeline evaluated, `__jevshield` block included when
+   * enrichment applied. Null only when no payload could be derived.
+   */
+  enrichedState: unknown | null;
+  /** Wall-clock cost of the whole pipeline for this turn. */
+  totalMs: number;
+  jevLatencyMs: number;
+  geminiLatencyMs: number;
+  model: string;
+  mode: StudioMode;
+  proseSource: "template" | "gemini";
+  usage: RunUsage;
+  blocked: boolean;
+  error?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  at: string;
+  /** Present on assistant turns — the decisions the prose was rendered from. */
+  reply?: ChatReply;
+}
+
 export interface RunPipelineInput {
   stateText: string;
   questions: JevQuestions;

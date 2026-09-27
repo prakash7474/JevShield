@@ -446,7 +446,7 @@ function ChoiceCriteriaForm({
 
       <div className="flex flex-col gap-1.5">
         {options.map((option, index) => (
-          <div key={`${option}-${index}`} className="flex items-center gap-1.5">
+          <div key={index} className="flex items-center gap-1.5">
             <Input
               value={option}
               onChange={(event) =>

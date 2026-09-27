@@ -42,7 +42,12 @@ function chartEntries(decision: JevDecision): ChartEntry[] {
       key,
       name,
       value,
-      winner: decision.type === "score" ? key === String(Math.round(Number(decision.value))) : key === String(decision.value),
+      winner:
+        decision.type === "score"
+          ? key === String(Math.round(Number(decision.value)))
+          : decision.type === "noul"
+            ? key === decision.label
+            : key === String(decision.value),
     };
   });
 

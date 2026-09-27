@@ -7,6 +7,7 @@ import {
 } from "dockview-react";
 import { useCallback, useRef, useState, type FunctionComponent } from "react";
 
+import { ChatView } from "@/components/ChatView";
 import { SettingsModal } from "@/components/SettingsModal";
 import { Toolbar } from "@/components/Toolbar";
 import { CascadeGraph } from "@/components/panels/CascadeGraph";
@@ -14,6 +15,7 @@ import { ProbabilityInspector } from "@/components/panels/ProbabilityInspector";
 import { QuestionBuilder } from "@/components/panels/QuestionBuilder";
 import { StateEditor } from "@/components/panels/StateEditor";
 import { TrajectoryLog } from "@/components/panels/TrajectoryLog";
+import { useRoute } from "@/lib/route";
 import { useStudioStore } from "@/store/useStudioStore";
 
 const PANELS: Record<string, FunctionComponent<IDockviewPanelProps>> = {
@@ -30,6 +32,8 @@ const PANELS: Record<string, FunctionComponent<IDockviewPanelProps>> = {
  *
  * The log is docked *first* so it becomes the root grid node, which is what
  * makes it span the full window width instead of only the centre column.
+ *
+ * The workbench is the default route; `#/chat` renders {@link ChatView} instead.
  */
 function buildDefaultLayout(api: DockviewApi): void {
   api.addPanel({
@@ -71,6 +75,7 @@ function buildDefaultLayout(api: DockviewApi): void {
 }
 
 export function App() {
+  const route = useRoute();
   const setLayoutJson = useStudioStore((state) => state.setLayoutJson);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const layoutTimer = useRef<number | null>(null);
@@ -112,11 +117,15 @@ export function App() {
     <div className="flex h-full min-h-0 flex-col bg-surface-0 text-slate-200">
       <Toolbar onOpenSettings={() => setSettingsOpen(true)} />
       <main className="min-h-0 flex-1">
-        <DockviewReact
-          theme={themeAbyss}
-          components={PANELS}
-          onReady={onReady}
-        />
+        {route === "chat" ? (
+          <ChatView />
+        ) : (
+          <DockviewReact
+            theme={themeAbyss}
+            components={PANELS}
+            onReady={onReady}
+          />
+        )}
       </main>
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>

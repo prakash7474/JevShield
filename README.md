@@ -5,7 +5,7 @@ Enterprise AI routing platform in three phases:
 | Phase | Package | Description |
 |---|---|---|
 | **1. Core SDK** | `@jevshield/core` | Headless SDK — deterministic state enrichment, adversarial guardrails, confidence-gated generative fallback, prose rendering |
-| **2. Studio** | `@jevshield/studio` | Tauri v2 + React desktop IDE for designing, auditing and replaying Jev decision pipelines |
+| **2. Studio** | `@jevshield/studio` | Tauri v2 + React desktop IDE for designing, auditing and replaying Jev decision pipelines, plus a chat surface over the same engine |
 | **3. Cloud Gateway** | `@jevshield/cloud` | Production gateway, telemetry engine, and central registry — scales Core and Studio across teams and microservices |
 
 ```bash

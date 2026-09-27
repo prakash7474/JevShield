@@ -2,6 +2,8 @@ import {
   AlertTriangle,
   CircleAlert,
   FlaskConical,
+  LayoutPanelTop,
+  MessageSquare,
   Play,
   Settings,
   ShieldAlert,
@@ -14,7 +16,43 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useRunPipeline } from "@/hooks/useRunPipeline";
 import { cn } from "@/lib/cn";
+import { navigate, ROUTES, useRoute, type StudioRoute } from "@/lib/route";
 import { useMode, useStudioStore } from "@/store/useStudioStore";
+
+const ROUTE_ICON: Record<StudioRoute, typeof MessageSquare> = {
+  workbench: LayoutPanelTop,
+  chat: MessageSquare,
+};
+
+/** Segmented control that switches the top-level route (see `lib/route.ts`). */
+function RouteNav() {
+  const active = useRoute();
+
+  return (
+    <nav className="ml-1 flex items-center gap-0.5 rounded-md border border-edge bg-surface-2 p-0.5">
+      {ROUTES.map((route) => {
+        const Icon = ROUTE_ICON[route.id];
+        return (
+          <button
+            key={route.id}
+            type="button"
+            onClick={() => navigate(route.id)}
+            title={route.title}
+            className={cn(
+              "flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
+              active === route.id
+                ? "bg-surface-3 text-slate-100"
+                : "text-slate-400 hover:text-slate-200",
+            )}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {route.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
 
 export function Toolbar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const mode = useMode();
@@ -67,6 +105,8 @@ export function Toolbar({ onOpenSettings }: { onOpenSettings: () => void }) {
         <span className="hidden font-mono text-[10px] text-slate-600 sm:inline">
           {model}
         </span>
+
+        <RouteNav />
 
         <span className="ml-auto flex items-center gap-1.5">
           <Button
